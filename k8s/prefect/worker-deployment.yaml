@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prefect-worker
+  namespace: dataops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prefect-worker
+  template:
+    metadata:
+      labels:
+        app: prefect-worker
+    spec:
+      serviceAccountName: prefect-worker
+      containers:
+        - name: worker
+          image: prefecthq/prefect:3-latest
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              pip install prefect-kubernetes
+              prefect worker start --pool local-k8s-pool --type kubernetes
+          env:
+            # ชี้ปลายทางมาที่ Service ของ Prefect Server ภายใน Cluster
+            - name: PREFECT_API_URL
+              value: "http://prefect-server:4200/api"

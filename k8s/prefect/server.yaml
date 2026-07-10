@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prefect-server
+  namespace: dataops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prefect-server
+  template:
+    metadata:
+      labels:
+        app: prefect-server
+    spec:
+      containers:
+        - name: server
+          image: prefecthq/prefect:3-latest
+          command: ["prefect", "server", "start", "--host", "0.0.0.0"]
+          ports:
+            - containerPort: 4200
+              name: api
+          env:
+            - name: PREFECT_SERVER_API_HOST
+              value: "0.0.0.0"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prefect-server
+  namespace: dataops
+spec:
+  type: ClusterIP
+  selector:
+    app: prefect-server
+  ports:
+    - port: 4200
+      targetPort: 4200
+      name: api
