@@ -1,0 +1,26 @@
+# Terraform Files
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+*.tfvars.json
+.terraform.lock.hcl
+
+# Python Files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Kubernetes/Prefect Local Secrets
+k8s/prefect/secret.yaml
