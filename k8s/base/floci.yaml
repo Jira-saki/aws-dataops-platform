@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: floci
+  namespace: dataops
+  labels:
+    app: floci
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: floci
+  template:
+    metadata:
+      labels:
+        app: floci
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: floci
+        image: floci/floci:latest
+        ports:
+        - containerPort: 4566
+        env:
+        - name: FLOCI_STORAGE_MODE
+          value: "hybrid"
+        - name: FLOCI_DEFAULT_REGION
+          value: "ap-northeast-1"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: floci
+  namespace: dataops
+spec:
+  type: ClusterIP
+  ports:
+  - port: 4566
+    targetPort: 4566
+  selector:
+    app: floci

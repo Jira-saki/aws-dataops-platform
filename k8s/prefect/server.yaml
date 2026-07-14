@@ -23,6 +23,8 @@ spec:
           env:
             - name: PREFECT_SERVER_API_HOST
               value: "0.0.0.0"
+            - name: PREFECT_API_URL
+              value: "http://192.168.3.74:4200/api"
 ---
 apiVersion: v1
 kind: Service
