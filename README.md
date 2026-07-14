@@ -108,8 +108,3 @@ dataops-lake/
 - Move from static/local credentials to IAM Roles for Service Accounts (IRSA) for production security.
 
 ---
-
-If you'd like, I can also:
-- add a short candidate-facing summary for a hiring packet,
-- produce a one-page architecture diagram,
-- or create a CONTRIBUTING.md with local dev steps.
