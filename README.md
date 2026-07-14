@@ -75,8 +75,7 @@ kubectl apply -f k8s/prefect/worker-deployment.yaml
 Run pipeline locally (hybrid mode):
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 AWS_S3_ENDPOINT="http://localhost:4566" python3 src/pipelines/mock_transactions.py
 ```
