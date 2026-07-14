@@ -24,3 +24,4 @@ Thumbs.db
 
 # Kubernetes/Prefect Local Secrets
 k8s/prefect/secret.yaml
+.venv/

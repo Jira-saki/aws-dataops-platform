@@ -1,14 +1,17 @@
 import datetime
+import os
 import random
 import pandas as pd
 import boto3
 from botocore.client import Config
 from prefect import flow, task
 
-# คอนฟิกปลายทาง MinIO (เน็ตเวิร์กภายใน Kubernetes Cluster)
-MINIO_ENDPOINT = "http://minio-service:9000"
-MINIO_ACCESS_KEY = "minioadmin"
-MINIO_SECRET_KEY = "minioadmin@123"
+# สลับ Endpoint อัตโนมัติ: 
+# - ถ้ารันใน K8s (ผ่าน Worker) จะใช้: http://floci:4566
+# - ถ้ารันโลคัลบน Hobgoblin Host จะใช้: http://localhost:4566 (ผ่าน port-forward)
+S3_ENDPOINT = os.getenv("AWS_S3_ENDPOINT", "http://floci:4566")
+AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY_ID", "mock_key")
+AWS_SECRET_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "mock_secret")
 BUCKET_NAME = "dataops-lake"
 
 @task(retries=3, retry_delay_seconds=10)
@@ -28,7 +31,6 @@ def generate_mock_data(num_records: int = 1000) -> pd.DataFrame:
             "category": categories[prod_idx],
             "amount": round(random.uniform(10.0, 1500.0), 2),
             "quantity": random.randint(1, 5),
-            # สร้างคอลัมน์สำหรับทำ Hive Partitioning
             "year": current_date.year,
             "month": f"{current_date.month:02d}",
             "day": f"{current_date.day:02d}"
@@ -37,41 +39,45 @@ def generate_mock_data(num_records: int = 1000) -> pd.DataFrame:
     return pd.DataFrame(data)
 
 @task
-def upload_to_minio_parquet(df: pd.DataFrame):
-    """Task สำหรับแปลงข้อมูลเป็น Parquet และยิงตรงเข้าโกดัง MinIO ด้วย S3 API"""
-    # เชื่อมต่อกับ MinIO client ผ่านโครงข่ายภายใน
+def upload_to_s3_parquet(df: pd.DataFrame):
+    """Task สำหรับแปลงข้อมูลเป็น Parquet และอัปโหลดเข้า Floci (S3 API)"""
     s3_client = boto3.client(
         's3',
-        endpoint_url=MINIO_ENDPOINT,
-        aws_access_key_id=MINIO_ACCESS_KEY,
-        aws_secret_key_id=MINIO_SECRET_KEY,
+        endpoint_url=S3_ENDPOINT,
+        aws_access_key_id=AWS_ACCESS_KEY,
+        aws_secret_access_key=AWS_SECRET_KEY,
         config=Config(signature_version='s3v4')
     )
     
-    # ดึงค่าวันที่ปัจจุบันจากแถวแรกเพื่อนำมาสร้างพิกัดโฟลเดอร์ปลายทาง
+    # ตรวจสอบและสร้าง Bucket ปลายทางบน Floci (S3) หากยังไม่มี
+    try:
+        s3_client.head_bucket(Bucket=BUCKET_NAME)
+    except Exception:
+        print(f"Bucket '{BUCKET_NAME}' not found. Creating it in Floci...")
+        s3_client.create_bucket(Bucket=BUCKET_NAME)
+    
     year = df['year'].iloc[0]
     month = df['month'].iloc[0]
     day = df['day'].iloc[0]
     
-    # กำหนดโครงสร้างโฟลเดอร์ปลายทางแบบ Hive-style Partitioning
     s3_key = f"transactions/year={year}/month={month}/day={day}/data.parquet"
     
-    # แปลง DataFrame ให้กลายเป็น Parquet ไบนารีในหน่วยความจำ (Buffer)
+    # แปลง DataFrame เป็น Parquet binary ใน memory buffer
     parquet_buffer = df.to_parquet(index=False, engine='pyarrow')
     
-    # อัปโหลดไฟล์ตรงเข้าโกดัง
+    # อัปโหลดเข้า S3 (Floci)
     s3_client.put_object(
         Bucket=BUCKET_NAME,
         Key=s3_key,
         Body=parquet_buffer
     )
-    print(f"Successfully uploaded Parquet data to S3 at: {BUCKET_NAME}/{s3_key}")
+    print(f"Successfully uploaded Parquet data to Floci (S3) at: {BUCKET_NAME}/{s3_key}")
 
 @flow(name="E-commerce DataOps Pipeline")
 def ecommerce_pipeline():
     """Main Flow สำหรับควบคุมลำดับการทำงานของ DataOps Platform"""
     raw_df = generate_mock_data(num_records=500)
-    upload_to_minio_parquet(raw_df)
+    upload_to_s3_parquet(raw_df)
 
 if __name__ == "__main__":
     ecommerce_pipeline()
