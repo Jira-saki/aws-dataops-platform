@@ -1,117 +1,115 @@
-# Hybrid DataOps Platform (Cloud-Ready Infrastructure)
+# Hybrid DataOps Platform — Local-first, Cloud-ready
 
-A production-grade, local-first DataOps platform designed to demonstrate enterprise-level infrastructure automation, data lifecycle management, and a cloud-agnostic architecture. Built on a local Kubernetes cluster (OrbStack/Hobgoblin) using Terraform, this platform runs a self-hosted orchestration engine and an S3-compatible data lake, executing optimized data pipelines that are ready for seamless migration to AWS.
+A production-grade, local-first DataOps platform designed to emulate enterprise cloud architecture for infrastructure automation, data lifecycle management, and cloud-agnostic deployment. It runs on a local Kubernetes cluster (e.g., OrbStack or Hobgoblin), managed with Terraform, uses a self-hosted Prefect orchestration layer, and an S3-compatible data lake (Floci). The environment is fully portable and can be migrated to AWS without changes to core code.
 
-## Architecture Overview
-
-The platform isolates components into distinct operational planes within a dedicated `dataops` Kubernetes namespace, ensuring low overhead and high portability.
-
-* **Infrastructure as Code (IaC):** Modularized Terraform architecture separating environment-specific configurations from reusable resource modules.
-* **Storage Plane (Local Data Lake):** Floci deployed as an AWS-compatible S3 Simulator service inside Kubernetes, exposing an AWS wire-protocol compliant API on port `4566` for seamless cloud-native emulation.
-* **Orchestration & Compute Plane:** Self-hosted Prefect Server (Control Plane) decoupled from an independent Prefect Kubernetes Worker (Execution Plane) running with dedicated RBAC permissions to dynamically spawn ephemeral data processing pods.
-* **Data Pipeline & Lifecycle:** A Python-based processing pipeline converting unstructured mock transaction streams into highly compressed columnar **Parquet** formats, enforced with **Hive-style partitioning** for cost and query optimization.
+**Why this repo matters for hiring decisions**
+- **Proves infrastructure and data engineering skills:** Terraform modules, Kubernetes manifests, and RBAC demonstrate production-oriented infrastructure design.
+- **Demonstrates data pipeline best practices:** End-to-end Python pipelines producing Parquet with Hive-style partitioning and efficient storage formats.
+- **Cloud parity & portability:** Local emulation of S3 and Prefect shows the candidate can design systems that run locally and scale to AWS.
 
 ---
 
-## Project Structure
+## Key components
+- **Infrastructure as Code:** Modular Terraform for environment-specific configs and reusable modules.
+- **Storage (Local Data Lake):** Floci provides an S3-compatible endpoint (default port 4566) for local testing.
+- **Orchestration:** Prefect self-hosted server (control plane) and Prefect Kubernetes workers (execution plane) with strict RBAC.
+- **Pipelines:** Python-based ETL that writes compressed columnar Parquet files with Hive-style partitioning for efficient queries.
 
-```text
+## Project structure
+
+```
 .
 ├── k8s/
 │   ├── base/
-│   │   └── floci.yaml            # Local AWS Emulator (S3 API) configuration
+│   │   └── floci.yaml
 │   └── prefect/
-│       ├── rbac.yaml             # ServiceAccount, Role, and Binding for Pod lifecycle control
-│       ├── server.yaml           # Self-hosted Prefect open-source Control Plane
-│       └── worker-deployment.yaml # Custom Kubernetes worker with dynamic dependencies installation
+│       ├── rbac.yaml
+│       ├── server.yaml
+│       └── worker-deployment.yaml
 ├── src/
 │   ├── pipelines/
-│   │   └── mock_transactions.py  # End-to-end Python ELT Pipeline (Pandas/PyArrow/Boto3)
-│   └── utils/                    # Shared data engineering utilities
+│   │   └── mock_transactions.py
+│   └── utils/
 └── terraform/
     ├── environments/
-    │   ├── local/                # Bootstrapping environment for Hobgoblin/OrbStack
-    │   │   ├── main.tf           # Root module invocation
-    │   │   ├── providers.tf      # Kubernetes provider scoping
+    │   ├── local/
+    │   │   ├── main.tf
+    │   │   ├── providers.tf
     │   │   └── outputs.tf
-    │   └── aws/                  # Production Target Migration environment (S3, EKS, IAM)
+    │   └── aws/
     └── modules/
-        └── k8s_namespace/        # Reusable component for namespace isolation and tagging
-
+        └── k8s_namespace/
 ```
 
-## Prerequisites
+## Quickstart (developer local environment)
 
-* **Kubernetes Cluster:** OrbStack (macOS) or Hobgoblin Lab (ThinkPad L15 with a local K8s engine).
-* **Terraform:** `>= 1.5.0`
-* **Command Line Tools:** `kubectl`, `nvim`
+Prerequisites:
+- Local Kubernetes (OrbStack or Hobgoblin)
+- Terraform >= 1.5.0
+- kubectl, Python 3.8+, pip, and Prefect CLI
 
----
-
-## Deployment Blueprint
-
-### Phase 1: Infrastructure Bootstrapping (IaC)
-Initialize and apply the Terraform configuration to provision the isolated namespace environment.
+Bootstrap infra (local):
 
 ```bash
 cd terraform/environments/local/
 terraform init
-terraform plan
 terraform apply -auto-approve
 ```
-## Phase 2: Deploying the Storage Plane (Floci S3 Simulator)
-Deploy the local AWS emulator container. The storage service will run inside the cluster and expose port 4566.
+
+Deploy Floci (local S3 emulator):
 
 ```bash
 kubectl apply -f k8s/base/floci.yaml
-
-Verify storage binding and pod lifecycle:
-
-```bash
 kubectl get pvc,pods -n dataops -w
-```
-# Expose Floci S3 API to localhost (Keep this running in a background terminal)
-```bash
 kubectl port-forward svc/floci 4566:4566 -n dataops --address 0.0.0.0
 ```
-## Phase 3: Launching Orchestration (Prefect Self-Hosted)
-Deploy the central coordination system and the execution workers. The deployment utilizes a shell abstraction wrapper to dynamically inject container dependencies (prefect-kubernetes) upon initialization.
+
+Deploy Prefect (self-hosted):
 
 ```bash
 kubectl apply -f k8s/prefect/server.yaml
 kubectl apply -f k8s/prefect/rbac.yaml
 kubectl apply -f k8s/prefect/worker-deployment.yaml
 ```
-## Running the Data Pipeline Locally (Hybrid Mode)
 
-Before registering the flow deployment to the Prefect Kubernetes worker, validate the pipeline logic directly from the Hobgoblin host machine.
+Run pipeline locally (hybrid mode):
 
-### 1. Bootstrap Python Virtual Environment
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt  # Ensure prefect, boto3, pandas, and pyarrow are installed
+pip install -r requirements.txt
+AWS_S3_ENDPOINT="http://localhost:4566" python3 src/pipelines/mock_transactions.py
 ```
 
-## Data Architecture & Storage Strategy
-The data pipeline utilizes PyArrow to enforce strong type casting and highly compressed data serialization. To mimic cloud cost optimization best practices (AWS DEA standards), files are committed into the MinIO storage node using Hive-style partitioning.
+If using Prefect UI, point the CLI to the control plane URL, e.g.:
 
-Storage Layout Pattern:
-```Plaintext
+```bash
+prefect config set PREFECT_API_URL="http://<control-plane-host>:4200/api"
+```
+
+## Data architecture highlights
+- Uses PyArrow to write compressed, columnar Parquet files.
+- Organizes data with Hive-style partitions (year/month/day) for partition pruning and efficient queries.
+
+Example layout on S3:
+
+```
 dataops-lake/
 └── transactions/
-     └── year=2026/
-          └── month=07/
-               └── day=10/
-                    └── data.parquet
+    └── year=2026/
+        └── month=07/
+            └── day=14/
+                └── data.parquet
 ```
-Benefits: This directory topology enables immediate Partition Pruning when querying via analytical layers (e.g., AWS Athena), decreasing compute scanning costs and minimizing data retrieval latency.
 
-## Multi-Environment AWS Migration Strategy
-This platform is intentionally engineered with a Cloud-Agnostic architectural pattern. Transitioning from the local lab cluster to full cloud execution on AWS involves a 3-step configuration switch without altering the core pipeline application code:
+## Migration to AWS (summary)
+- Switch `AWS_S3_ENDPOINT` to the production S3 endpoint or use real S3 buckets.
+- Replace local Prefect workers with EKS/ECS-based workers and scale compute accordingly.
+- Move from static/local credentials to IAM Roles for Service Accounts (IRSA) for production security.
 
-Storage Layer Abstraction: Swap the internal MinIO S3 endpoint configuration out for native AWS S3 Buckets.
+---
 
-Compute Infrastructure Scaling: Migrate the Prefect Worker deployment into an AWS EKS Cluster or AWS ECS Fargate task definitions.
-
-Identity Realignment: Replace standard Kubernetes RBAC configurations with AWS IAM Roles for Service Accounts (IRSA) to achieve fine-grained, secure infrastructure communication.
+If you'd like, I can also:
+- add a short candidate-facing summary for a hiring packet,
+- produce a one-page architecture diagram,
+- or create a CONTRIBUTING.md with local dev steps.
