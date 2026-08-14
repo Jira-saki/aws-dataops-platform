@@ -1,27 +1,26 @@
-# Terraform Files
-.terraform/
-*.tfstate
-*.tfstate.backup
-*.tfvars
-*.tfvars.json
-.terraform.lock.hcl
-
-# Python Files
+# Python & Virtualenv
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
+*.py[cod]
+*$py.class
+.venv/
 env/
 venv/
-.venv/
-pip-log.txt
-pip-delete-this-directory.txt
+*.egg-info/
+.pytest_cache/
 
-# OS Files
-.DS_Store
-Thumbs.db
+# dlt Pipeline & Local State
+.dlt/
+*.duckdb
+data/sample/
+data/lakehouse/
+data/raw/
+*.log
+*.gz
 
-# Kubernetes/Prefect Local Secrets
-k8s/prefect/secret.yaml
-.venv/
+# Terraform Local State & Credentials
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+*.tfvars
+*.tfvars.json

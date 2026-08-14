@@ -1,109 +1,238 @@
-# Hybrid DataOps Platform — Local-first, Cloud-ready
+# Hybrid DataSecOps & Lakehouse Platform — Local-First, Cloud-Ready
 
-A production-grade, local-first DataOps platform designed to emulate enterprise cloud architecture for infrastructure automation, data lifecycle management, and cloud-agnostic deployment. It runs on a local Kubernetes cluster (e.g., OrbStack or Hobgoblin), managed with Terraform, uses a self-hosted Prefect orchestration layer, and an S3-compatible data lake (Floci). The environment is fully portable and can be migrated to AWS without changes to core code.
+A production-grade, local-first DataSecOps and Lakehouse platform engineered for multi-tenant web access log ingestion, automated security log correlation, and cloud-agnostic deployment.
 
-**Why this repo matters for hiring decisions**
-- **Proves infrastructure and data engineering skills:** Terraform modules, Kubernetes manifests, and RBAC demonstrate production-oriented infrastructure design.
-- **Demonstrates data pipeline best practices:** End-to-end Python pipelines producing Parquet with Hive-style partitioning and efficient storage formats.
-- **Cloud parity & portability:** Local emulation of S3 and Prefect shows the candidate can design systems that run locally and scale to AWS.
+The platform bridges local developer iteration and enterprise cloud infrastructure through an architectural continuum: developers run 100% offline using Python 3.12, the `dlt` (data load tool) ELT framework, DuckDB OLAP engine, and an S3-compatible emulator (Floci) on local Kubernetes (`Hobgoblin` / OrbStack). When ready for production, modular HashiCorp Terraform provisions a matching AWS cloud environment featuring SSE-AES256 encrypted S3 data lakes, an AWS Glue Catalog configured with **Partition Projection**, and serverless AWS Athena threat hunting SQL suites.
 
 ---
 
-## Key components
-- **Infrastructure as Code:** Modular Terraform for environment-specific configs and reusable modules.
-- **Storage (Local Data Lake):** Floci provides an S3-compatible endpoint (default port 4566) for local testing.
-- **Orchestration:** Prefect self-hosted server (control plane) and Prefect Kubernetes workers (execution plane) with strict RBAC.
-- **Pipelines:** Python-based ETL that writes compressed columnar Parquet files with Hive-style partitioning for efficient queries.
+## 🎯 Architectural Highlights & Key Pillars
 
-## Project structure
+* **Infrastructure as Code (IaC) & Parity:** Modular Terraform architecture (`modules/s3`, `modules/glue_catalog`) providing 100% parity between local emulation and AWS production targets with server-side encryption (SSE-AES256), public access blocks, and automated metadata management.
+* **Deterministic PII Masking & Privacy Engineering:** Client IP addresses are pseudonymized at ingestion time using a salted SHA-256 cryptographic hasher (`src/utils/hasher.py`), producing a fixed 12-character identifier (`user_masked_id`) to ensure GDPR compliance without sacrificing user correlation capabilities.
+* **Dynamic Multi-Tenancy:** Automated domain normalization routes web access logs into isolated tenant namespaces (`tenant_01`, `tenant_02`).
+* **Non-Blocking Dead Letter Queue (DLQ):** Unparseable payloads, malformed headers, and regex mismatches are automatically segregated into an isolated DLQ Parquet dataset, allowing clean records to process continuously without pipeline failures.
+* **Hive-Style Parquet Partitioning:** Columnar Apache Parquet storage structured with Hive-style directory partitioning (`year=YYYY/month=MM/day=DD`) for high-ratio Snappy/ZSTD compression and aggressive partition pruning.
+* **AWS Glue Partition Projection:** Eliminates daily Glue Crawler executions and expensive metastore listing operations by deterministically projecting partition metadata directly within Athena queries.
+* **Local-to-Cloud Threat Hunting:** Unified SQL analytics interface supporting local threat queries via DuckDB and enterprise cloud security investigation via AWS Athena.
+
+---
+
+## 🏗 System Architecture
+
+![DATASEC-OPS PLATFORM Architecture Data Flow](assets/dataops.png)
+
+```text
+               [ Raw Multi-Tenant Logs / Audit Trails ]
+                                   │
+                                   ▼
+         ┌──────────────────────────────────────────────────┐
+         │          DataSecOps Ingestion Gateway (dlt)      │
+         ├──────────────────────────────────────────────────┤
+         │  • Regex Log Parsing & Normalization             │
+         │  • Deterministic SHA-256 PII Hasher (Client IPs) │
+         │  • Dynamic Tenant Partition Routing              │
+         │  • Dead Letter Queue (DLQ) Anomaly Filter        │
+         └──────────────────────────────────────────────────┘
+                                   │
+             ┌─────────────────────┴─────────────────────┐
+             ▼                                           ▼
+   [ Clean Access & Audit Logs ]               [ Corrupted Payloads ]
+             │                                           │
+             └─────────────────────┬─────────────────────┘
+                                   ▼
+                   [ Hive-Partitioned Apache Parquet ]
+                 (year=YYYY / month=MM / day=DD)
+                                   │
+      ┌────────────────────────────┴────────────────────────────┐
+      ▼                                                         ▼
+[ Local Environment ]                                   [ AWS Cloud Target ]
+• Local K8s Cluster (`Hobgoblin`)                       • Terraform Managed Infra
+• S3 Emulator (Floci :4566)                             • Encrypted S3 Data Lake
+• DuckDB OLAP Analytics Engine                          • AWS Glue Data Catalog
+• Self-Hosted Prefect Orchestration                     • Athena Threat Hunting Suite
+```
+
+---
+
+## 📁 Repository Structure
 
 ```
 .
-├── k8s/
-│   ├── base/
-│   │   └── floci.yaml
-│   └── prefect/
-│       ├── rbac.yaml
-│       ├── server.yaml
-│       └── worker-deployment.yaml
+├── Makefile                          # Unified build, test, and pipeline automation
+├── pytest.ini                        # Pytest configuration and Python path resolver
+├── README.md                         # Platform documentation
+├── requirements.txt                  # Python dependencies (dlt, pyarrow, boto3, duckdb, pytest)
+├── assets/
+│   └── dataops.png                   # Architecture Data Flow diagram
+├── sql/
+│   └── athena_threat_hunting.sql     # Production Athena Threat Hunting SQL suite
 ├── src/
 │   ├── pipelines/
-│   │   └── mock_transactions.py
+│   │   └── xserver_pipeline.py       # Core dlt DataSecOps ELT pipeline
 │   └── utils/
-└── terraform/
-    ├── environments/
-    │   ├── local/
-    │   │   ├── main.tf
-    │   │   ├── providers.tf
-    │   │   └── outputs.tf
-    │   └── aws/
-    └── modules/
-        └── k8s_namespace/
+│       ├── hasher.py                 # Deterministic Salted SHA-256 PII Hasher
+│       └── parser.py                 # High-throughput regex access & audit log parsers
+├── terraform/
+│   ├── environments/
+│   │   ├── aws/                      # AWS Production Environment (S3 + Glue)
+│   │   └── local/                    # Local-first emulation provisioning
+│   └── modules/
+│       ├── glue_catalog/             # Glue DB, Partition Projection Tables
+│       └── s3/                       # Hardened S3 Bucket with SSE-AES256
+└── tests/
+    └── test_parser.py                # Unit test suite for parsing, hashing, and DLQ
 ```
 
-## Quickstart (developer local environment)
+---
 
-Prerequisites:
-- Local Kubernetes (OrbStack or Hobgoblin)
-- Terraform >= 1.5.0
-- kubectl, Python 3.8+, pip, and Prefect CLI
+## 🚀 Quickstart Guide
 
-Bootstrap infra (local):
+### 1. Environment & Local Provisioning
+
+Initialize Python virtual environment and provision local emulation infrastructure:
 
 ```bash
+# Set up Python virtual environment & install dependencies
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Provision local infrastructure emulation (S3/Floci object store)
 cd terraform/environments/local/
 terraform init
 terraform apply -auto-approve
+cd ../../../
 ```
 
-Deploy Floci (local S3 emulator):
+### 2. Run Quality Assurance & Unit Tests
+
+Execute the unit test suite covering deterministic PII masking, regex parsing edge cases, and DLQ anomaly routing:
 
 ```bash
-kubectl apply -f k8s/base/floci.yaml
-kubectl get pvc,pods -n dataops -w
-kubectl port-forward svc/floci 4566:4566 -n dataops --address 0.0.0.0
+make test
+# or: pytest -v tests/
 ```
 
-Deploy Prefect (self-hosted):
+### 3. Execute DataSecOps Pipeline
+
+Run the pipeline to parse raw access logs, apply salted SHA-256 IP masking, route unparseable records to DLQ, and write Hive-partitioned Parquet files to `data/lakehouse`:
 
 ```bash
-kubectl apply -f k8s/prefect/server.yaml
-kubectl apply -f k8s/prefect/rbac.yaml
-kubectl apply -f k8s/prefect/worker-deployment.yaml
+# Process raw logs and export Parquet Lakehouse locally
+make run-parquet
+
+# Inspect generated Hive partition structure
+tree data/lakehouse
 ```
 
-Run pipeline locally (hybrid mode):
+### 4. Threat Hunting Verification (Local Analytics)
+
+Query the generated Parquet files using the local DuckDB OLAP engine to analyze status code distributions and identify anomaly patterns:
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-AWS_S3_ENDPOINT="http://localhost:4566" python3 src/pipelines/mock_transactions.py
+python -c "
+import duckdb
+con = duckdb.connect()
+print(con.sql('''
+    SELECT 
+        tenant_id, 
+        user_masked_id, 
+        request_path, 
+        http_method, 
+        status_code, 
+        COUNT(*) AS attempts
+    FROM 'data/lakehouse/dataops_lakehouse/xserver_access_logs/*/*/*/*.parquet'
+    WHERE status_code IN (403, 404)
+    GROUP BY ALL
+    ORDER BY attempts DESC
+''').df())
+"
 ```
 
-If using Prefect UI, point the CLI to the control plane URL, e.g.:
+### 5. Infrastructure Validation
+
+Validate AWS production Terraform configurations prior to deployment:
 
 ```bash
-prefect config set PREFECT_API_URL="http://<control-plane-host>:4200/api"
+# Validate AWS Production Configuration
+make tf-validate
+
+# Deploy Infrastructure to AWS (requires configured AWS credentials)
+cd terraform/environments/aws
+terraform init
+terraform plan -out=tfplan
+terraform apply tfplan
 ```
-
-## Data architecture highlights
-- Uses PyArrow to write compressed, columnar Parquet files.
-- Organizes data with Hive-style partitions (year/month/day) for partition pruning and efficient queries.
-
-Example layout on S3:
-
-```
-dataops-lake/
-└── transactions/
-    └── year=2026/
-        └── month=07/
-            └── day=14/
-                └── data.parquet
-```
-
-## Migration to AWS (summary)
-- Switch `AWS_S3_ENDPOINT` to the production S3 endpoint or use real S3 buckets.
-- Replace local Prefect workers with EKS/ECS-based workers and scale compute accordingly.
-- Move from static/local credentials to IAM Roles for Service Accounts (IRSA) for production security.
 
 ---
+
+## ☁️ Infrastructure as Code & Partition Projection
+
+The cloud target uses AWS Glue Data Catalog configured with **Partition Projection**. This eliminates metastore synchronization overhead by projecting date-based partition paths dynamically:
+
+```hcl
+resource "aws_glue_catalog_table" "xserver_access_logs" {
+  name          = "xserver_access_logs"
+  database_name = var.database_name
+  table_type    = "EXTERNAL_TABLE"
+
+  parameters = {
+    "classification"            = "parquet"
+    "projection.enabled"        = "true"
+    "projection.year.type"      = "integer"
+    "projection.year.range"     = "2024,2030"
+    "projection.month.type"     = "integer"
+    "projection.month.range"    = "1,12"
+    "projection.month.digits"   = "2"
+    "projection.day.type"       = "integer"
+    "projection.day.range"      = "1,31"
+    "projection.day.digits"     = "2"
+    "storage.location.template" = "s3://${var.s3_bucket_id}/dataops_lakehouse/xserver_access_logs/year=$${year}/month=$${month}/day=$${day}/"
+  }
+  # ... storage_descriptor & column definitions ...
+}
+```
+
+---
+
+## 🛡 DataSecOps & Threat Hunting Showcase
+
+Production query snippet from `sql/athena_threat_hunting.sql` executed against AWS Athena to detect reconnaissance probing (`.env`, `wp-config`, administrative endpoints):
+
+```sql
+-- Detect Reconnaissance & Exploitation Probing
+SELECT 
+    tenant_id,
+    user_masked_id,
+    request_path,
+    http_method,
+    status_code,
+    COUNT(*) AS scan_attempts,
+    MIN(timestamp) AS first_attempt_utc,
+    MAX(timestamp) AS last_attempt_utc
+FROM dataops_lakehouse_prod.xserver_access_logs
+WHERE (year = '2026' AND month = '08')
+  AND (
+      request_path LIKE '%/.env%'
+      OR request_path LIKE '%/wp-config%'
+      OR request_path LIKE '%/wp-login%'
+      OR status_code IN (401, 403, 404)
+  )
+GROUP BY tenant_id, user_masked_id, request_path, http_method, status_code
+ORDER BY scan_attempts DESC;
+```
+
+---
+
+## 📦 Requirements & Tooling
+
+| Component | Technology | Version / Specification | Role in Architecture |
+| :--- | :--- | :--- | :--- |
+| **Language** | Python | `>= 3.12` | Pipeline logic & custom log parsers |
+| **ELT Framework** | dlt (data load tool) | `>= 1.0.0` | Ingestion, schema inference, & filesystem load |
+| **Storage Engine** | Apache Parquet (PyArrow) | Columnar (Snappy / ZSTD) | Data lake storage with Hive partitioning |
+| **Local Query Engine** | DuckDB | `>= 1.0.0` | Zero-copy SQL analytics on local Parquet files |
+| **IaC** | HashiCorp Terraform | `>= 1.5.0` (AWS Provider `~> 5.0`) | Declarative infrastructure provisioning |
+| **Cloud Target** | AWS S3, Glue, Athena | Hive Partition Projection | Production encrypted data lake & query engine |
+| **Testing** | Pytest | Unit & Anomaly Routing Tests | Test coverage for parsing, hashing, & DLQ |
