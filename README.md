@@ -1,3 +1,5 @@
+[![DataSecOps CI Pipeline](https://github.com/Jira-saki/aws-dataops-platform/actions/workflows/ci.yaml/badge.svg)](https://github.com/Jira-saki/aws-dataops-platform/actions/workflows/ci.yaml)
+
 # Hybrid DataSecOps & Lakehouse Platform — Local-First, Cloud-Ready
 
 A production-grade, local-first DataSecOps and Lakehouse platform engineered for multi-tenant web access log ingestion, automated security log correlation, and cloud-agnostic deployment.
