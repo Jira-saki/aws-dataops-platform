@@ -64,6 +64,9 @@ The platform bridges local developer iteration and enterprise cloud infrastructu
 ├── README.md                         # Platform documentation
 ├── requirements.txt                  # Python dependencies (dlt, pyarrow, boto3, duckdb, pytest)
 ├── assets/
+│   ├── aws_athena_proof.png          # Live AWS Athena query execution evidence
+│   ├── aws_glue_proof.png            # Live AWS Glue Table schema proof
+│   ├── aws_glue_proof-adv.png        # Live AWS Glue Partition Projection config proof
 │   └── dataops.png                   # Architecture Data Flow diagram
 ├── sql/
 │   └── athena_threat_hunting.sql     # Production Athena Threat Hunting SQL suite
@@ -222,6 +225,21 @@ WHERE (year = '2026' AND month = '08')
 GROUP BY tenant_id, user_masked_id, request_path, http_method, status_code
 ORDER BY scan_attempts DESC;
 ```
+
+---
+
+## 📊 Live AWS Verification & Architecture Evidence
+
+The infrastructure and DataSecOps pipeline were validated against live AWS resources using a zero-idle-cost FinOps lifecycle (`terraform apply` ➔ Ingest & Query ➔ `terraform destroy`):
+
+| 1. Glue Table Schema | 2. Partition Projection Config | 3. Athena Query Execution |
+| :---: | :---: | :---: |
+| ![Glue Schema](assets/aws_glue_proof.png) | ![Glue Advanced Config](assets/aws_glue_proof-adv.png) | ![Athena Query](assets/aws_athena_proof.png) |
+
+### Key Architectural Highlights:
+* **Serverless Metastore Scaling:** AWS Glue Partition Projection (`projection.enabled = true` & custom `storage.location.template`) eliminates periodic crawler runs and enables instant partition discovery.
+* **DataSecOps & Privacy Compliance:** Client IPs are deterministically pseudonymized at ingestion via Salted SHA-256 (`user_masked_id`), complying with GDPR/APPI without sacrificing analytics capability.
+* **FinOps Storage Efficiency:** Columnar Parquet with multi-level Hive partitioning reduced analytical query data scan to **0.50 KB** (sub-kilobyte footprint).
 
 ---
 
